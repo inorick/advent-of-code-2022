@@ -94,7 +94,7 @@ pub mod test {
     #[test]
     fn input_file1() {
         let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("resources/input1.txt");
+        path.push("resources/input_nf.txt");
         let input = std::fs::read_to_string(&path).expect("failed to read file");
         let (fattest_elf, cals) =
             crate::find_fattest_elf(input).expect("failed to find fattest elf");
@@ -113,7 +113,7 @@ pub mod test {
     #[test]
     fn input_file2() {
         let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("resources/input2.txt");
+        path.push("resources/input_nf.txt");
         let input = std::fs::read_to_string(&path).expect("failed to read file");
         let calsum = crate::find_calsum_of_top3_fattest_elfs(input)
             .expect("failed to find calculate sum of fattest elfs");
