@@ -6,91 +6,51 @@ pub enum Error {
 fn main() {}
 
 pub fn calculate_score_part1(list: String) -> Result<u32, Error> {
-    let list = list.split(|c| c == '\n');
-    let mut sum = 0;
-    for line in list {
-        let line: Vec<&str> = line.split(' ').collect();
-        if line.len() != 2 {
-            return Err(Error::InvalidInput);
-        }
-        let opp = line[0];
-        let own = line[1];
-
-        sum += match opp {
-            "A" => match own {
-                "X" => 1 + 3,
-                "Y" => 2 + 6,
-                "Z" => 3 + 0,
-                _ => {
-                    return Err(Error::InvalidInput);
-                }
-            },
-            "B" => match own {
-                "X" => 1 + 0,
-                "Y" => 2 + 3,
-                "Z" => 3 + 6,
-                _ => {
-                    return Err(Error::InvalidInput);
-                }
-            },
-            "C" => match own {
-                "X" => 1 + 6,
-                "Y" => 2 + 0,
-                "Z" => 3 + 3,
-                _ => {
-                    return Err(Error::InvalidInput);
-                }
-            },
+    Ok(list
+        .split(|c| c == '\n')
+        .into_iter()
+        .map(|line| match line {
+            "A X" => Ok(1 + 3),
+            "A Y" => Ok(2 + 6),
+            "A Z" => Ok(3 + 0),
+            "B X" => Ok(1 + 0),
+            "B Y" => Ok(2 + 3),
+            "B Z" => Ok(3 + 6),
+            "C X" => Ok(1 + 6),
+            "C Y" => Ok(2 + 0),
+            "C Z" => Ok(3 + 3),
             _ => {
                 return Err(Error::InvalidInput);
             }
-        };
-    }
-    Ok(sum)
+        })
+        .collect::<Result<Vec<u32>, _>>()
+        .map_err(|_| Error::InvalidInput)?
+        .iter()
+        .sum())
 }
 
 pub fn calculate_score_part2(list: String) -> Result<u32, Error> {
-    let list = list.split(|c| c == '\n');
-    let mut sum = 0;
-    for line in list {
-        let line: Vec<&str> = line.split(' ').collect();
-        if line.len() != 2 {
-            return Err(Error::InvalidInput);
-        }
-        let opp = line[0];
-        let own = line[1];
-
-        sum += match opp {
-            "A" => match own {
-                "X" => 3 + 0,
-                "Y" => 1 + 3,
-                "Z" => 2 + 6,
-                _ => {
-                    return Err(Error::InvalidInput);
-                }
-            },
-            "B" => match own {
-                "X" => 1 + 0,
-                "Y" => 2 + 3,
-                "Z" => 3 + 6,
-                _ => {
-                    return Err(Error::InvalidInput);
-                }
-            },
-            "C" => match own {
-                "X" => 2 + 0,
-                "Y" => 3 + 3,
-                "Z" => 1 + 6,
-                _ => {
-                    return Err(Error::InvalidInput);
-                }
-            },
+    Ok(list
+        .split(|c| c == '\n')
+        .into_iter()
+        .map(|line| match line {
+            "A X" => Ok(3 + 0),
+            "A Y" => Ok(1 + 3),
+            "A Z" => Ok(2 + 6),
+            "B X" => Ok(1 + 0),
+            "B Y" => Ok(2 + 3),
+            "B Z" => Ok(3 + 6),
+            "C X" => Ok(2 + 0),
+            "C Y" => Ok(3 + 3),
+            "C Z" => Ok(1 + 6),
             _ => {
                 return Err(Error::InvalidInput);
             }
-        };
-    }
-    Ok(sum)
+        })
+        .collect::<Result<Vec<u32>, _>>()
+        .map_err(|_| Error::InvalidInput)?
+        .iter()
+        .sum())
 }
 
 #[cfg(test)]
