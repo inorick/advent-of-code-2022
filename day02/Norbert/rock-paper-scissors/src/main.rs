@@ -19,9 +19,7 @@ pub fn calculate_score_part1(list: String) -> Result<u32, Error> {
             "C X" => Ok(1 + 6),
             "C Y" => Ok(2 + 0),
             "C Z" => Ok(3 + 3),
-            _ => {
-                return Err(Error::InvalidInput);
-            }
+            _ => Err(Error::InvalidInput),
         })
         .collect::<Result<Vec<u32>, _>>()
         .map_err(|_| Error::InvalidInput)?
@@ -43,9 +41,7 @@ pub fn calculate_score_part2(list: String) -> Result<u32, Error> {
             "C X" => Ok(2 + 0),
             "C Y" => Ok(3 + 3),
             "C Z" => Ok(1 + 6),
-            _ => {
-                return Err(Error::InvalidInput);
-            }
+            _ => Err(Error::InvalidInput),
         })
         .collect::<Result<Vec<u32>, _>>()
         .map_err(|_| Error::InvalidInput)?
