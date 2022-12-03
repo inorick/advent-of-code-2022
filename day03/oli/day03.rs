@@ -31,7 +31,7 @@ fn score(s: &str) -> usize {
     priority(common)
 }
 
-pub fn main() {
+pub fn solve() {
     let args: Vec<String> = env::args().collect();
     let file_path = &args[1];
     let file = File::open(file_path).unwrap_or_else(|_| panic!("could not read file {file_path}"));
@@ -43,6 +43,51 @@ pub fn main() {
     });
     println!("{sum}");
 }
+pub fn solve2() {
+    let args: Vec<String> = env::args().collect();
+    let file_path = &args[1];
+    let file = File::open(file_path).unwrap_or_else(|_| panic!("could not read file {file_path}"));
+    let mut sum = 0usize;
+    let lines: Result<Vec<String>, std::io::Error> = io::BufReader::new(file).lines().collect();
+    let lines = lines.unwrap();
+    let triples = lines.chunks(3);
+    triples.for_each(|triple| {
+        let common = common_element(triple).expect("could not find common element");
+        sum += priority(common);
+    });
+    println!("{sum}");
+}
+
+fn common_element(strs: &[String]) -> Option<char> {
+    let set1: HashSet<char> = strs[0].chars().collect();
+    let set2: HashSet<char> = strs[1]
+        .chars()
+        .into_iter()
+        .filter(|&c| set1.contains(&c))
+        .collect();
+
+    strs[2].chars().into_iter().find(|&c| set2.contains(&c))
+}
+#[test]
+fn test_common_element() {
+    assert_eq!(
+        common_element(&[
+            "vJrwpWtwJgWrhcsFMMfFFhFp".to_string(),
+            "jqHRNqRjqzjGDLGLrsFMfFZSrLrFZsSL".to_string(),
+            "PmmdzqPrVvPwwTWBwg".to_string()
+        ]),
+        Some('r')
+    );
+    assert_eq!(
+        common_element(&[
+            "wMqvLMZHhHMvwLHjbvcjnnSBnvTQFn".to_string(),
+            "ttgJtRGJQctTZtZT".to_string(),
+            "CrZsJsPPZsGzwwsLwLmpwMDw".to_string()
+        ]),
+        Some('Z')
+    );
+}
+
 #[test]
 fn test_priority() {
     assert_eq!(priority('p'), 16);
@@ -75,3 +120,4 @@ fn test_split() {
     );
     assert_eq!(split("PmmdzqPrVPmmdzqPrV"), ("PmmdzqPrV", "PmmdzqPrV"));
 }
+
