@@ -25,6 +25,20 @@ int main(void)
         }
     }
     printf("first: %d\n",pair_counter);
+
+    rewind(stdin);
+    pair_counter = 0;
+
+    while(fgets(line,sizeof(line),stdin))
+    {
+        sscanf(line,"%d-%d,%d-%d\n",&first_start,&first_end,&second_start,&second_end);
+        if(first_start <= second_end && first_end >= second_start)
+        {
+            pair_counter++;
+        }
+    }
+    printf("second: %d\n",pair_counter);
+
     return 0;
 }
 
