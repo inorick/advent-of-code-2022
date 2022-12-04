@@ -17,22 +17,15 @@ fn into_range(a: &str) -> RangeInclusive<u32> {
 
 pub fn solve(path: &str) {
     let mut sum = 0usize;
+    let mut sum2 = 0usize;
     get_input(path).iter().for_each(|line| {
         let xs: Vec<&str> = line.split(',').collect();
         let ranges = (into_range(xs[0]), into_range(xs[1]));
-        sum += score(ranges);
+        sum += score(ranges.clone());
+        sum2 += score2(ranges);
     });
     println!("{sum}");
-}
-
-pub fn solve2(path: &str) {
-    let mut sum = 0usize;
-    get_input(path).iter().for_each(|line| {
-        let xs: Vec<&str> = line.split(',').collect();
-        let ranges = (into_range(xs[0]), into_range(xs[1]));
-        sum += score2(ranges);
-    });
-    println!("{sum}");
+    println!("{sum2}");
 }
 
 fn score(ranges: (RangeInclusive<u32>, RangeInclusive<u32>)) -> usize {
@@ -67,12 +60,6 @@ fn test_into_range() {
 
 #[test]
 fn test_contains() {
-    // 2-4,6-8
-    // 2-3,4-5
-    // 5-7,7-9
-    // 2-8,3-7
-    // 6-6,4-6
-    // 2-6,4-8
     assert!(!fully_contains((2..=4), (6..=8)));
     assert!(!fully_contains((2..=3), (4..=7)));
     assert!(!fully_contains((5..=7), (7..=9)));
