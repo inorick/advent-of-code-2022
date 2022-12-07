@@ -17,8 +17,8 @@ pub fn solve<const WINDOW_SIZE: usize>(input: String) -> Result<usize, Error> {
         .windows(WINDOW_SIZE)
         .enumerate()
         .find(|(_, seq)| seq.iter().unique().count() == WINDOW_SIZE)
-        .map(|(i, _)| i)
         .ok_or(Error::InvalidInput)?
+        .0
         + WINDOW_SIZE)
 }
 
