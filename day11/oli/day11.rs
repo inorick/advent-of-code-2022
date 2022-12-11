@@ -7,112 +7,86 @@ use std::{
 struct Monkey {
     index: usize,
     activity_count: usize,
+    test: (u128, u128, u128),
     starting_items: VecDeque<u128>,
     op: Box<dyn Fn(u128) -> u128>,
-    next: Box<dyn Fn(u128) -> u128>,
 }
 impl fmt::Debug for Monkey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Monkey {}: {:?}", self.index, self.starting_items)
     }
 }
+impl Monkey {
+    fn new(
+        index: usize,
+        v: Vec<u128>,
+        op: Box<dyn Fn(u128) -> u128>,
+        test: (u128, u128, u128),
+    ) -> Self {
+        Self {
+            index,
+            activity_count: 0,
+            test,
+            starting_items: VecDeque::from(v),
+            op,
+        }
+    }
+    fn next(&self, x: u128) -> u128 {
+        if x % self.test.0 == 0 {
+            self.test.1
+        } else {
+            self.test.2
+        }
+    }
+}
 
 fn init() -> Vec<Monkey> {
     vec![
-        Monkey {
-            index: 0,
-            activity_count: 0,
-            starting_items: VecDeque::from(vec![71, 56, 50, 73]),
-            op: Box::new(|x| x * 11),
-            next: Box::new(|x| if x % 13 == 0 { 1 } else { 7 }),
-        },
-        Monkey {
-            index: 1,
-            activity_count: 0,
-            starting_items: VecDeque::from(vec![70, 89, 82]),
-            op: Box::new(|x| x + 1),
-            next: Box::new(|x| if x % 7 == 0 { 3 } else { 6 }),
-        },
-        Monkey {
-            index: 2,
-            activity_count: 0,
-            starting_items: VecDeque::from(vec![52, 95]),
-            op: Box::new(|x| x * x),
-            next: Box::new(|x| if x % 3 == 0 { 5 } else { 4 }),
-        },
-        Monkey {
-            index: 3,
-            activity_count: 0,
-            starting_items: VecDeque::from(vec![94, 64, 69, 87, 70]),
-            op: Box::new(|x| x + 2),
-            next: Box::new(|x| if x % 19 == 0 { 2 } else { 6 }),
-        },
-        Monkey {
-            index: 4,
-            activity_count: 0,
-            starting_items: VecDeque::from(vec![98, 72, 98, 53, 97, 51]),
-            op: Box::new(|x| x + 6),
-            next: Box::new(|x| if x % 5 == 0 { 0 } else { 5 }),
-        },
-        Monkey {
-            index: 5,
-            activity_count: 0,
-            starting_items: VecDeque::from(vec![79]),
-            op: Box::new(|x| x + 7),
-            next: Box::new(|x| if x % 2 == 0 { 7 } else { 0 }),
-        },
-        Monkey {
-            index: 6,
-            activity_count: 0,
-            starting_items: VecDeque::from(vec![77, 55, 63, 93, 66, 90, 88, 71]),
-            op: Box::new(|x| x * 7),
-            next: Box::new(|x| if x % 11 == 0 { 2 } else { 4 }),
-        },
-        Monkey {
-            index: 7,
-            activity_count: 0,
-            starting_items: VecDeque::from(vec![54, 97, 87, 70, 59, 82, 59]),
-            op: Box::new(|x| x + 8),
-            next: Box::new(|x| if x % 17 == 0 { 1 } else { 3 }),
-        },
+        Monkey::new(0, vec![71, 56, 50, 73], Box::new(|x| x * 11), (13, 1, 7)),
+        Monkey::new(1, vec![70, 89, 82], Box::new(|x| x + 1), (7, 3, 6)),
+        Monkey::new(2, vec![52, 95], Box::new(|x| x * x), (3, 5, 4)),
+        Monkey::new(3, vec![94, 64, 69, 87, 70], Box::new(|x| x + 2), (19, 2, 6)),
+        Monkey::new(
+            4,
+            vec![98, 72, 98, 53, 97, 51],
+            Box::new(|x| x + 6),
+            (5, 0, 5),
+        ),
+        Monkey::new(5, vec![79], Box::new(|x| x + 7), (2, 7, 0)),
+        Monkey::new(
+            6,
+            vec![77, 55, 63, 93, 66, 90, 88, 71],
+            Box::new(|x| x * 7),
+            (11, 2, 4),
+        ),
+        Monkey::new(
+            7,
+            vec![54, 97, 87, 70, 59, 82, 59],
+            Box::new(|x| x + 8),
+            (17, 1, 3),
+        ),
     ]
 }
 
 fn init_tests() -> Vec<Monkey> {
     vec![
-        Monkey {
-            index: 0,
-            activity_count: 0,
-            starting_items: VecDeque::from(vec![79, 98]),
-            op: Box::new(|x| x * 19),
-            next: Box::new(|x| if x % 23 == 0 { 2 } else { 3 }),
-        },
-        Monkey {
-            index: 1,
-            activity_count: 0,
-            starting_items: VecDeque::from(vec![54, 65, 75, 74]),
-            op: Box::new(|x| x + 6),
-            next: Box::new(|x| if x % 19 == 0 { 2 } else { 0 }),
-        },
-        Monkey {
-            index: 2,
-            activity_count: 0,
-            starting_items: VecDeque::from(vec![79, 60, 97]),
-            op: Box::new(|x| x * x),
-            next: Box::new(|x| if x % 13 == 0 { 1 } else { 3 }),
-        },
-        Monkey {
-            index: 3,
-            activity_count: 0,
-            starting_items: VecDeque::from(vec![74]),
-            op: Box::new(|x| x + 3),
-            next: Box::new(|x| u128::from(x % 17 != 0)),
-        },
+        Monkey::new(0, vec![79, 98], Box::new(|x| x * 19), (23, 2, 3)),
+        Monkey::new(1, vec![54, 65, 75, 74], Box::new(|x| x + 6), (19, 2, 0)),
+        Monkey::new(2, vec![79, 60, 97], Box::new(|x| x * x), (13, 1, 3)),
+        Monkey::new(3, vec![74], Box::new(|x| x + 3), (17, 0, 1)),
     ]
 }
 
 // worry level to be divided by three and rounded down to the nearest integer
 pub fn solve() {
+    {
+        let monkeys = init_tests();
+        let monkeys = play_rounds(20, monkeys, Box::new(calm));
+        for m in &monkeys {
+            println!("Monkey {}: {}", m.index, m.activity_count);
+        }
+        println!("monkey_business: {}", monkey_business(&monkeys));
+    }
     {
         let monkeys = init();
         let monkeys = play_rounds(20, monkeys, Box::new(calm));
@@ -156,7 +130,7 @@ fn round(mut monkeys: Vec<Monkey>, f: &dyn Fn(u128) -> u128) -> Vec<Monkey> {
             m.activity_count += 1;
             let worry = (m.op)(i);
             let calm = f(worry);
-            let next = (m.next)(calm);
+            let next = m.next(calm);
             to_add
                 .entry(next as usize)
                 .and_modify(|v| v.push(calm))
