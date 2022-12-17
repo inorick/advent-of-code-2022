@@ -127,7 +127,7 @@ pub fn solve(input: String, part2: bool) -> Result<u32, Error> {
 pub fn visit_alone(
     name: String,
     mut open_nodes: Vec<Node>,
-    mut minute: u32,
+    minute: u32,
     mut flow_rate: u32,
     mut released: u32,
 ) -> Result<u32, Error> {
@@ -142,34 +142,29 @@ pub fn visit_alone(
     let node_rate = own_node.flow_rate;
     let connections = own_node.connections.clone();
 
-    // Open local valve
+    // Open local valve. Time expense was already allocated during travel planning.
     if node_rate > 0 {
         open_nodes.retain(|n| n.name != name);
-        minute += 1;
-        released += flow_rate;
-        max_released = max(max_released, released);
         flow_rate += node_rate;
     }
 
-    if minute == MAX_MINUTES {
-        return Ok(max_released);
-    }
-    if minute > MAX_MINUTES {
+    if minute >= MAX_MINUTES {
         panic!("minute={minute}!");
     }
 
     // Go somewhere else
     for (name, distance) in connections {
-        if minute + distance < MAX_MINUTES && open_nodes.iter().any(|n| n.name == name) {
-            let released = released + (distance * flow_rate);
+        let time_for_travel_and_opening = distance + 1;
+        if minute + time_for_travel_and_opening < MAX_MINUTES
+            && open_nodes.iter().any(|n| n.name == name)
+        {
             let max_released_by_visit = visit_alone(
                 name,
                 open_nodes.clone(),
-                minute + distance,
+                minute + time_for_travel_and_opening,
                 flow_rate,
-                released,
+                released + (time_for_travel_and_opening * flow_rate),
             )?;
-            max_released = max(max_released, released);
             max_released = max(max_released, max_released_by_visit);
         }
     }
@@ -184,10 +179,10 @@ pub fn visit_alone(
 pub fn visit_with_elephant(
     my_node_name: String,
     el_node_name: String,
-    mut my_tta: u32,
-    mut el_tta: u32,
+    my_tto: u32, // Time it take for me to open remote valve
+    el_tto: u32, // Time it take for the elephant to open remote valve
     mut open_nodes: Vec<Node>,
-    mut minute: u32,
+    minute: u32,
     mut flow_rate: u32,
     mut released: u32,
 ) -> Result<u32, Error> {
@@ -215,31 +210,18 @@ pub fn visit_with_elephant(
     let el_connections = el_node.connections.clone();
 
     // Open local valves
-    let i_arrived = my_tta == 0;
-    let el_arrived = el_tta == 0;
-    let mut opened_a_valve = false;
+    let i_arrived = my_tto == 0;
+    let el_arrived = el_tto == 0;
     if i_arrived && my_node_rate > 0 {
         open_nodes.retain(|n| n.name != my_node_name);
         flow_rate += my_node_rate;
-        opened_a_valve = true;
     }
     if el_arrived && el_node_rate > 0 {
         open_nodes.retain(|n| n.name != el_node_name);
         flow_rate += el_node_rate;
-        opened_a_valve = true;
-    }
-    if opened_a_valve {
-        minute += 1;
-        my_tta = my_tta.saturating_sub(1);
-        el_tta = el_tta.saturating_sub(1);
-        released += flow_rate;
-        max_released = max(max_released, released);
     }
 
-    if minute == MAX_MINUTES {
-        return Ok(max_released);
-    }
-    if minute > MAX_MINUTES {
+    if minute >= MAX_MINUTES {
         panic!("minute={minute}!");
     }
 
@@ -250,19 +232,19 @@ pub fn visit_with_elephant(
                 if my_conn.0 == el_conn.0 {
                     continue; // Never go to the same node
                 }
-                let time_until_next_event = min(my_conn.1, el_conn.1);
-                if minute + time_until_next_event < MAX_MINUTES
+                let time_until_next_open = min(my_conn.1 + 1, el_conn.1 + 1);
+                if minute + time_until_next_open < MAX_MINUTES
                     && open_nodes.iter().any(|n| n.name == my_conn.0)
                     && open_nodes.iter().any(|n| n.name == el_conn.0)
                 {
-                    let released = released + (time_until_next_event * flow_rate);
+                    let released = released + (time_until_next_open * flow_rate);
                     let max_released_by_visit = visit_with_elephant(
                         my_conn.0.clone(),
                         el_conn.0.clone(),
-                        my_conn.1 - time_until_next_event,
-                        el_conn.1 - time_until_next_event,
+                        my_conn.1 + 1 - time_until_next_open,
+                        el_conn.1 + 1 - time_until_next_open,
                         open_nodes.clone(),
-                        minute + time_until_next_event,
+                        minute + time_until_next_open,
                         flow_rate,
                         released,
                     )?;
@@ -276,19 +258,19 @@ pub fn visit_with_elephant(
             if my_conn.0 == el_node_name {
                 continue; // Never go to the same node
             }
-            let time_until_next_event = min(my_conn.1, el_tta);
-            if minute + time_until_next_event < MAX_MINUTES
+            let time_until_next_open = min(my_conn.1 + 1, el_tto);
+            if minute + time_until_next_open < MAX_MINUTES
                 && open_nodes.iter().any(|n| n.name == my_conn.0)
             {
-                let released = released + (time_until_next_event * flow_rate);
+                let released = released + (time_until_next_open * flow_rate);
                 max_released = max(max_released, released);
                 let max_released_this_way = visit_with_elephant(
                     my_conn.0.clone(),
                     el_node_name.clone(),
-                    my_conn.1 - time_until_next_event,
-                    el_tta - time_until_next_event,
+                    my_conn.1 + 1 - time_until_next_open,
+                    el_tto - time_until_next_open,
                     open_nodes.clone(),
-                    minute + time_until_next_event,
+                    minute + time_until_next_open,
                     flow_rate,
                     released,
                 )?;
@@ -300,19 +282,19 @@ pub fn visit_with_elephant(
             if el_conn.0 == my_node_name {
                 continue; // Never go to the same node
             }
-            let time_until_next_event = min(my_tta, el_conn.1);
-            if minute + time_until_next_event < MAX_MINUTES
+            let time_until_next_open = min(my_tto, el_conn.1 + 1);
+            if minute + time_until_next_open < MAX_MINUTES
                 && open_nodes.iter().any(|n| n.name == el_conn.0)
             {
-                let released = released + (time_until_next_event * flow_rate);
+                let released = released + (time_until_next_open * flow_rate);
                 max_released = max(max_released, released);
                 let max_released_this_way = visit_with_elephant(
                     my_node_name.clone(),
                     el_conn.0.clone(),
-                    my_tta - time_until_next_event,
-                    el_conn.1 - time_until_next_event,
+                    my_tto - time_until_next_open,
+                    el_conn.1 + 1 - time_until_next_open,
                     open_nodes.clone(),
-                    minute + time_until_next_event,
+                    minute + time_until_next_open,
                     flow_rate,
                     released,
                 )?;
@@ -340,6 +322,15 @@ pub mod test {
     }
 
     #[test]
+    fn solve_example_with_elephant() {
+        let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("resources/example_input.txt");
+        let input = std::fs::read_to_string(&path).expect("failed to read file");
+        let max_released = crate::solve(input, true).expect("failed to solve");
+        assert_eq!(max_released, 1707);
+    }
+
+    #[test]
     fn solve_part1() {
         let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("resources/input.txt");
@@ -354,6 +345,6 @@ pub mod test {
         path.push("resources/input.txt");
         let input = std::fs::read_to_string(&path).expect("failed to read file");
         let max_released = crate::solve(input, true).expect("failed to solve");
-        assert_eq!(max_released, 1641);
+        assert_eq!(max_released, 0);
     }
 }
