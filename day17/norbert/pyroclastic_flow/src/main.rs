@@ -17,7 +17,7 @@ pub enum Flow {
 
 const CHAMBER_WIDTH: usize = 7;
 const NUM_BLOCKS: u64 = 5;
-const FLOW_CYCLE: usize = 10091;
+const FLOW_CYCLE: u64 = 10091;
 
 pub fn solve(input: String, max_blocks: u64) -> Result<u64, Error> {
     let flow = input
@@ -32,6 +32,7 @@ pub fn solve(input: String, max_blocks: u64) -> Result<u64, Error> {
         })
         .collect::<Result<Vec<_>, Error>>()?;
     let mut flow = flow.iter().cycle();
+    let mut used_flows: u64 = 0;
 
     // Build chamber
     let mut chamber: Vec<[bool; CHAMBER_WIDTH]> = vec![];
@@ -44,7 +45,6 @@ pub fn solve(input: String, max_blocks: u64) -> Result<u64, Error> {
         }
 
         let mut pos: (usize, usize) = (2, chamber.len() + 3);
-        let mut used_flows = 0;
         let block = next_block(block_nr);
         let mut settled = false;
         while !settled {
@@ -79,7 +79,7 @@ pub fn solve(input: String, max_blocks: u64) -> Result<u64, Error> {
 
                 // Print height if we hit full cycle, i.e. we are back to first block and first flow
                 if (block_nr + 1) % NUM_BLOCKS == 0 && used_flows == 0 {
-                    println!("Height at full cycle: {height}");
+                    println!("Hit full cycle: block_nr={block_nr}, height={height}");
                 }
 
                 // Forget old chamber lines
