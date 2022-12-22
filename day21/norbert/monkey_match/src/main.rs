@@ -41,7 +41,6 @@ pub fn solve_part2(input: String) -> Result<(), Error> {
 
     // Print Sage program
     let comma = ", ".to_string();
-    #[allow(unstable_name_collisions)]
     let names: String = monkeys.keys().intersperse(&comma).cloned().collect();
     println!("{names} = var('{names}')");
 
