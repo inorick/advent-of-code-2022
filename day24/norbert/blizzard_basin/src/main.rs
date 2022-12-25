@@ -3,7 +3,7 @@ extern crate core;
 use crate::Direction::{Down, Left, Right, Up};
 use crate::Error::InvalidInput;
 use itertools::Itertools;
-use pathfinding::prelude::bfs;
+use pathfinding::prelude::astar;
 use std::collections::HashMap;
 
 fn main() {}
@@ -77,14 +77,18 @@ fn shortest_path(
     init_step: usize,
     blizzards: &HashMap<(usize, usize), Direction>,
 ) -> Result<u32, Error> {
-    let result = bfs(
+    let successors = |(x, y, step): &(usize, usize, usize)| {
+        let next_blizzards = move_blizzards(blizzards, step + 1, width, height);
+        let state = (*x, *y, *step);
+        next(width, height, start, goal, state, &next_blizzards)
+    };
+    let heuristic = |(x, y, _step): &(usize, usize, usize)| x.abs_diff(goal.0) + y.abs_diff(goal.1);
+    let success = |(x, y, _step): &(usize, usize, usize)| *x == goal.0 && *y == goal.1;
+    let result = astar(
         &(start.0, start.1, init_step),
-        |(x, y, step)| {
-            let next_blizzards = move_blizzards(blizzards, step + 1, width, height);
-            let state = (*x, *y, *step);
-            next(width, height, start, goal, state, &next_blizzards)
-        },
-        |(x, y, _step)| *x == goal.0 && *y == goal.1,
+        successors,
+        heuristic,
+        success,
     );
     match &result {
         None => {
@@ -92,10 +96,10 @@ fn shortest_path(
             Err(InvalidInput)
         }
         Some(result) => {
-            let steps = result.len() - 1;
+            let steps = result.0.len() - 1;
             println!("Shortest path takes {steps} steps:");
-            for r in result {
-                println!("{r:?}");
+            for step in &result.0 {
+                println!("{step:?}");
             }
             Ok(steps as u32)
         }
@@ -109,12 +113,13 @@ pub fn next(
     goal: (usize, usize),
     (x, y, step): (usize, usize, usize),
     next_blizzards: &HashMap<(usize, usize), Direction>,
-) -> Vec<(usize, usize, usize)> {
+) -> Vec<((usize, usize, usize), usize)> {
+    const COST: usize = 1;
     let mut next_positions = vec![];
     {
         let wait = (x, y);
         if !next_blizzards.keys().contains(&wait) {
-            next_positions.push((wait.0, wait.1, step + 1));
+            next_positions.push(((wait.0, wait.1, step + 1), COST));
         }
     }
     if y >= 1 {
@@ -122,7 +127,7 @@ pub fn next(
         let would_hit_border = y == 1 && up != start && up != goal;
         let would_hit_blizzard = next_blizzards.keys().contains(&up);
         if !would_hit_border && !would_hit_blizzard {
-            next_positions.push((up.0, up.1, step + 1));
+            next_positions.push(((up.0, up.1, step + 1), COST));
         }
     }
     if y <= height - 2 {
@@ -130,21 +135,21 @@ pub fn next(
         let would_hit_border = y == height - 2 && down != start && down != goal;
         let would_hit_blizzard = next_blizzards.keys().contains(&down);
         if !would_hit_border && !would_hit_blizzard {
-            next_positions.push((down.0, down.1, step + 1));
+            next_positions.push(((down.0, down.1, step + 1), COST));
         }
     }
     if x >= 2 && y != 0 && y != height - 1 {
         let left = (x - 1, y);
         let would_hit_blizzard = next_blizzards.keys().contains(&left);
         if !would_hit_blizzard {
-            next_positions.push((left.0, left.1, step + 1));
+            next_positions.push(((left.0, left.1, step + 1), COST));
         }
     }
     if x < width - 2 && y != 0 && y != height - 1 {
         let right = (x + 1, y);
         let would_hit_blizzard = next_blizzards.keys().contains(&right);
         if !would_hit_blizzard {
-            next_positions.push((right.0, right.1, step + 1));
+            next_positions.push(((right.0, right.1, step + 1), COST));
         }
     }
     next_positions
