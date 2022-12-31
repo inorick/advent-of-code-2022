@@ -44,6 +44,7 @@ pub fn solve_part1(input: String) -> Result<u32, Error> {
     let (names, flows, neighbours) = parse(input)?;
     let graph = build_graph(&names, &flows, &neighbours);
     let max_released = max_released_part1(30, &flows, &graph);
+    println!("max_released={max_released}");
     Ok(max_released)
 }
 
@@ -51,12 +52,23 @@ pub fn solve_part2(input: String) -> Result<u32, Error> {
     let (names, flows, neighbours) = parse(input)?;
     let graph = build_graph(&names, &flows, &neighbours);
     let max_released = max_released_part2(26, &flows, &graph);
+    println!("max_released={max_released}");
     Ok(max_released)
 }
 
 fn max_released_part2(time_remaining: u32, flows: &Flows, graph: &Graph) -> u32 {
     let mut max_released = 0;
-    fn goto_next(state: StatePart2, max_released: &mut u32, flows: &Flows, graph: &Graph) {
+    let init_state = StatePart2 {
+        my_pos: START.to_string(),
+        el_pos: START.to_string(),
+        my_tta: 0,
+        el_tta: 0,
+        open_nodes: vec![],
+        time_remaining,
+        will_release: 0,
+    };
+    let mut states = Vec::from([init_state]);
+    while let Some(state) = states.pop() {
         if state.my_tta == 0 {
             let my_candidates = graph
                 .get(&state.my_pos)
@@ -67,19 +79,22 @@ fn max_released_part2(time_remaining: u32, flows: &Flows, graph: &Graph) -> u32 
                 if state.time_remaining < my_dist + 2 {
                     continue; // Not enough time to go to dest, open valve and release some pressure
                 }
-                let mut new_state = state.clone();
+                let mut next_state = state.clone();
                 let time_to_open = my_dist + 1;
-                let time_active = new_state.time_remaining - time_to_open;
+                let time_active = next_state.time_remaining - time_to_open;
                 let time_to_next_action = min(time_to_open, state.el_tta);
                 let flow = flows.get(my_dest).unwrap();
-                new_state.my_pos = my_dest.clone();
-                new_state.my_tta = time_to_open - time_to_next_action;
-                new_state.el_tta -= time_to_next_action;
-                new_state.time_remaining -= time_to_next_action; // Time it takes to get to dist and open valve
-                new_state.open_nodes.push(my_dest.clone());
-                new_state.will_release += time_active * flow;
-                *max_released = max(*max_released, new_state.will_release);
-                goto_next(new_state, max_released, flows, graph);
+                next_state.my_pos = my_dest.clone();
+                next_state.my_tta = time_to_open - time_to_next_action;
+                next_state.el_tta -= time_to_next_action;
+                next_state.time_remaining -= time_to_next_action;
+                next_state.open_nodes.push(my_dest.clone());
+                next_state.will_release += time_active * flow;
+                if potential_release(&next_state, flows) < max_released {
+                    continue;
+                }
+                max_released = max(max_released, next_state.will_release);
+                states.push(next_state);
             }
         }
         if state.el_tta == 0 {
@@ -92,42 +107,38 @@ fn max_released_part2(time_remaining: u32, flows: &Flows, graph: &Graph) -> u32 
                 if state.time_remaining < el_dist + 2 {
                     continue; // Not enough time to go to dest, open valve and release some pressure
                 }
-                let mut new_state = state.clone();
+                let mut next_state = state.clone();
                 let time_to_open = el_dist + 1;
-                let time_active = new_state.time_remaining - time_to_open;
+                let time_active = next_state.time_remaining - time_to_open;
                 let time_to_next_action = min(time_to_open, state.my_tta);
                 let flow = flows.get(el_dest).unwrap();
-                new_state.el_pos = el_dest.clone();
-                new_state.el_tta = time_to_open - time_to_next_action;
-                new_state.my_tta -= time_to_next_action;
-                new_state.time_remaining -= time_to_next_action; // Time it takes to get to dist and open valve
-                new_state.open_nodes.push(el_dest.clone());
-                new_state.will_release += time_active * flow;
-                if potential_release(&new_state, flows) < *max_released {
+                next_state.el_pos = el_dest.clone();
+                next_state.el_tta = time_to_open - time_to_next_action;
+                next_state.my_tta -= time_to_next_action;
+                next_state.time_remaining -= time_to_next_action;
+                next_state.open_nodes.push(el_dest.clone());
+                next_state.will_release += time_active * flow;
+                if potential_release(&next_state, flows) < max_released {
                     continue;
                 }
-                *max_released = max(*max_released, new_state.will_release);
-                goto_next(new_state, max_released, flows, graph);
+                max_released = max(max_released, next_state.will_release);
+                states.push(next_state);
             }
         }
     }
-    let init_state = StatePart2 {
-        my_pos: START.to_string(),
-        el_pos: START.to_string(),
-        my_tta: 0,
-        el_tta: 0,
-        open_nodes: vec![],
-        time_remaining,
-        will_release: 0,
-    };
-    goto_next(init_state, &mut max_released, flows, graph);
-    println!("max_released={max_released}");
     max_released
 }
 
 fn max_released_part1(time_remaining: u32, flows: &Flows, graph: &Graph) -> u32 {
     let mut max_released = 0;
-    fn goto_next(state: StatePart1, max_released: &mut u32, flows: &Flows, graph: &Graph) {
+    let init_state = StatePart1 {
+        pos: START.to_string(),
+        open_nodes: vec![],
+        time_remaining,
+        will_release: 0,
+    };
+    let mut states = Vec::from([init_state]);
+    while let Some(state) = states.pop() {
         let candidates = graph
             .get(&state.pos)
             .unwrap()
@@ -137,26 +148,18 @@ fn max_released_part1(time_remaining: u32, flows: &Flows, graph: &Graph) -> u32 
             if state.time_remaining < dist + 2 {
                 continue; // Not enough time to go to dest, open valve and release some pressure
             }
-            let mut new_state = state.clone();
-            let time_to_open = dist + 1;
-            let time_active = new_state.time_remaining - time_to_open;
+            let mut next_state = state.clone();
+            let time_to_open = dist + 1; // Time it takes to get to dist and open valve
+            let time_active = next_state.time_remaining - time_to_open;
             let flow = flows.get(dest).unwrap();
-            new_state.pos = dest.clone();
-            new_state.time_remaining -= time_to_open; // Time it takes to get to dist and open valve
-            new_state.open_nodes.push(dest.clone());
-            new_state.will_release += time_active * flow;
-            *max_released = max(*max_released, new_state.will_release);
-            goto_next(new_state, max_released, flows, graph);
+            next_state.pos = dest.clone();
+            next_state.time_remaining -= time_to_open;
+            next_state.open_nodes.push(dest.clone());
+            next_state.will_release += time_active * flow;
+            max_released = max(max_released, next_state.will_release);
+            states.push(next_state);
         }
     }
-    let init_state = StatePart1 {
-        pos: START.to_string(),
-        open_nodes: vec![],
-        time_remaining,
-        will_release: 0,
-    };
-    goto_next(init_state, &mut max_released, flows, graph);
-    println!("max_released={max_released}");
     max_released
 }
 
@@ -210,7 +213,7 @@ fn build_graph(names: &Names, flows: &Flows, neighbours: &Neighbours) -> Graph {
         }
         print!("Node {}: ", start);
         for (dest, dist) in graph.get(start).unwrap() {
-            print!("({dest}, {dist}) ");
+            print!("({dest}, {dist:>2}) ");
         }
         println!();
     }
