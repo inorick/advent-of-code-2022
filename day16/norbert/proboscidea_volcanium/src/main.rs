@@ -69,6 +69,8 @@ fn max_released_part2(time_remaining: u32, flows: &Flows, graph: &Graph) -> u32 
     };
     let mut states = Vec::from([init_state]);
     while let Some(state) = states.pop() {
+        // If both my_tta == 0 and el_tta == 0 then the former will be processed during this
+        // iteration and the second one during the next iteration.
         if state.my_tta == 0 {
             let my_candidates = graph
                 .get(&state.my_pos)
@@ -96,8 +98,7 @@ fn max_released_part2(time_remaining: u32, flows: &Flows, graph: &Graph) -> u32 
                 max_released = max(max_released, next_state.will_release);
                 states.push(next_state);
             }
-        }
-        if state.el_tta == 0 {
+        } else if state.el_tta == 0 {
             let el_candidates = graph
                 .get(&state.el_pos)
                 .unwrap()
