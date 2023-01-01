@@ -1,193 +1,272 @@
 extern crate core;
 
-use std::cmp::max;
+use crate::Error::Solve;
+use good_lp::solvers::coin_cbc::CoinCbcSolution;
+use good_lp::{
+    default_solver, variable, variables, Constraint, Expression, ResolutionError, Solution,
+    SolverModel, Variable,
+};
+use std::cmp::min;
+use std::iter::{zip, Sum};
+use std::ops::Mul;
 
 fn main() {}
 
 #[derive(Debug)]
 pub enum Error {
     InvalidInput,
+    Solve(ResolutionError),
 }
 
 #[derive(Debug)]
 pub struct Blueprint {
-    pub nr: u16,
-    pub ore_for_ore_robot: u16,
-    pub ore_for_clay_robot: u16,
-    pub ore_for_obsidian_robot: u16,
-    pub clay_for_obsidian_robot: u16,
-    pub ore_for_geode_robot: u16,
-    pub obsidian_for_geode_robot: u16,
+    pub nr: u32,
+    pub ore_per_ore_robot: u32,
+    pub ore_per_clay_robot: u32,
+    pub ore_per_obsidian_robot: u32,
+    pub clay_per_obsidian_robot: u32,
+    pub ore_per_geode_robot: u32,
+    pub obsidian_per_geode_robot: u32,
 }
 
 #[derive(Clone, Debug)]
-pub struct GameState {
-    pub ore: u16,
-    pub clay: u16,
-    pub obsidian: u16,
-    pub geodes: u16,
-    pub ore_robots: u16,
-    pub clay_robots: u16,
-    pub obsidian_robots: u16,
-    pub geode_robots: u16,
+pub struct Robots {
+    pub ore: Vec<Variable>,
+    pub clay: Vec<Variable>,
+    pub obsidian: Vec<Variable>,
+    pub geodes: Vec<Variable>,
 }
 
-pub fn solve(input: String) -> Result<u16, Error> {
-    const INITIAL_STATE: GameState = GameState {
-        ore: 0,
-        clay: 0,
-        obsidian: 0,
-        geodes: 0,
-        ore_robots: 1,
-        clay_robots: 0,
-        obsidian_robots: 0,
-        geode_robots: 0,
-    };
+#[derive(Clone, Debug)]
+pub struct Resources {
+    pub ore: Expression,
+    pub clay: Expression,
+    pub obsidian: Expression,
+    pub geodes: Expression,
+}
 
-    let blueprints = parse_blueprints(input);
-    let mut quality_levels = vec![];
+pub fn solve_part1(input: String) -> Result<u32, Error> {
+    const MAX_MINUTES: usize = 24;
+    let blueprints = parse(input);
+    let max_geodes = max_geodes(&blueprints, MAX_MINUTES)?;
+    Ok(max_geodes.iter().map(|(nr, geodes)| nr * geodes).sum())
+}
 
+pub fn solve_part2(input: String) -> Result<u32, Error> {
+    const MAX_MINUTES: usize = 32;
+    let blueprints = parse(input);
+    let blueprints = blueprints.get(..min(blueprints.len(), 3)).unwrap();
+    let max_geodes = max_geodes(blueprints, MAX_MINUTES)?;
+    Ok(max_geodes.iter().map(|(_, geodes)| geodes).product())
+}
+
+fn max_geodes(blueprints: &[Blueprint], max_minutes: usize) -> Result<Vec<(u32, u32)>, Error> {
+    let mut result = vec![];
     for (nr, blueprint) in blueprints.iter().enumerate() {
-        println!("{blueprint:?}");
-        const MAX_MINUTES: u16 = 24;
-        let mut max_geodes = 0;
-        let mut candidates = vec![INITIAL_STATE];
+        // Variables
+        let mut vars = variables!();
+        let robots = Robots {
+            ore: vars.add_vector(variable().binary(), max_minutes),
+            clay: vars.add_vector(variable().binary(), max_minutes),
+            obsidian: vars.add_vector(variable().binary(), max_minutes),
+            geodes: vars.add_vector(variable().binary(), max_minutes),
+        };
 
-        for minute in 1u16..=MAX_MINUTES {
-            println!("minute={minute}: states={}", candidates.len());
+        // Objective
+        let objective = gathered(max_minutes, &robots).geodes;
+        let mut problem = vars.maximise(&objective).using(default_solver);
 
-            let mut next_states = vec![];
-            let minutes_left = MAX_MINUTES - minute + 1;
-            if minutes_left == 1 && candidates.iter().all(|s| s.geode_robots == 0) {
-                break; // No point in building geode robots in the last minute
-            }
-
-            while !candidates.is_empty() {
-                let state = candidates.pop().expect("failed to get next state");
-                if can_build_ore_robot(blueprint, &state) {
-                    let mut next_state = state.clone();
-                    gather_resources(&mut next_state);
-                    build_ore_robot(blueprint, &mut next_state);
-                    if can_improve(&next_state, minutes_left - 1, max_geodes) {
-                        update_max_geodes(&mut max_geodes, next_state.geodes);
-                        next_states.push(next_state);
-                    }
-                }
-                if can_build_clay_robot(blueprint, &state) {
-                    let mut next_state = state.clone();
-                    gather_resources(&mut next_state);
-                    build_clay_robot(blueprint, &mut next_state);
-                    if can_improve(&next_state, minutes_left - 1, max_geodes) {
-                        update_max_geodes(&mut max_geodes, next_state.geodes);
-                        next_states.push(next_state);
-                    }
-                }
-                if can_build_obsidian_robot(blueprint, &state) {
-                    let mut next_state = state.clone();
-                    gather_resources(&mut next_state);
-                    build_obsidian_robot(blueprint, &mut next_state);
-                    if can_improve(&next_state, minutes_left - 1, max_geodes) {
-                        update_max_geodes(&mut max_geodes, next_state.geodes);
-                        next_states.push(next_state);
-                    }
-                }
-                if can_build_geode_robot(blueprint, &state) {
-                    let mut next_state = state.clone();
-                    gather_resources(&mut next_state);
-                    build_geode_robot(blueprint, &mut next_state);
-                    if can_improve(&next_state, minutes_left - 1, max_geodes) {
-                        update_max_geodes(&mut max_geodes, next_state.geodes);
-                        next_states.push(next_state);
-                    }
-                }
-                // Do not build a robot. Just gather
-                {
-                    let mut next_state = state.clone();
-                    gather_resources(&mut next_state);
-                    if can_improve(&next_state, minutes_left - 1, max_geodes) {
-                        update_max_geodes(&mut max_geodes, next_state.geodes);
-                        next_states.push(next_state);
-                    }
-                }
-            }
-            candidates = next_states
-                .into_iter()
-                .filter(|s| can_improve(s, minutes_left - 1, max_geodes))
-                .collect();
-            candidates.shrink_to_fit();
+        // Constraints
+        let one_robot_per_minute_max = one_robot_per_minute_max(&robots, max_minutes);
+        let enough_resources_to_build = enough_resources_to_build(blueprint, &robots, max_minutes);
+        for cons in one_robot_per_minute_max {
+            problem = problem.with(cons);
+        }
+        for cons in enough_resources_to_build {
+            problem = problem.with(cons);
         }
 
-        let quality_level = ((nr + 1) as u16, max_geodes);
-        println!("Quality level: {quality_level:?}");
-        quality_levels.push(quality_level.0 * quality_level.1);
+        // Solve
+        let sol = problem.solve().map_err(Solve)?;
+        let max_geodes = sol.eval(&objective);
+        let nr = (nr + 1) as u32;
+        let max_geodes = max_geodes as u32;
+        result.push((nr, max_geodes));
+
+        // Debug output
+        for minute in 0..max_minutes {
+            println!("minute={minute}");
+            print_robots(minute, &sol, &robots);
+            print_build(minute, &sol, &robots);
+            print_spent(minute, &sol, blueprint, &robots);
+            print_gathered(minute, &sol, &robots);
+        }
+        println!("nr={nr}");
+        println!("max_geodes={max_geodes}");
         println!();
     }
-    println!();
-
-    Ok(quality_levels.iter().sum())
+    Ok(result)
 }
 
-fn update_max_geodes(max_geodes: &mut u16, geodes: u16) {
-    if geodes > *max_geodes {
-        println!("New max geodes: {geodes}");
+fn one_robot_per_minute_max(robots: &Robots, max_minutes: usize) -> Vec<Constraint> {
+    let mut constraints = vec![];
+    for minute in 0..max_minutes {
+        constraints.push(
+            (robots.ore[minute]
+                + robots.clay[minute]
+                + robots.obsidian[minute]
+                + robots.geodes[minute])
+                .leq(1),
+        );
     }
-    *max_geodes = max(*max_geodes, geodes);
+    constraints
 }
 
-fn can_improve(state: &GameState, minutes_left: u16, max_geodes: u16) -> bool {
-    let future_geodes_by_existing_robots = state.geode_robots * minutes_left;
-    let future_geodes_by_future_robots = ((minutes_left.saturating_sub(1)) * minutes_left) / 2;
-    state.geodes + future_geodes_by_existing_robots + future_geodes_by_future_robots > max_geodes
+fn enough_resources_to_build(
+    blueprint: &Blueprint,
+    robots: &Robots,
+    max_minutes: usize,
+) -> Vec<Constraint> {
+    let mut constraints = vec![];
+    for minute in 0..max_minutes {
+        let have = gathered(minute, robots);
+        let need = spent(minute + 1, blueprint, robots);
+        constraints.push(have.ore.geq(need.ore));
+        constraints.push(have.clay.geq(need.clay));
+        constraints.push(have.obsidian.geq(need.obsidian));
+    }
+    constraints
 }
 
-fn gather_resources(game_state: &mut GameState) {
-    game_state.ore += game_state.ore_robots;
-    game_state.clay += game_state.clay_robots;
-    game_state.obsidian += game_state.obsidian_robots;
-    game_state.geodes += game_state.geode_robots;
+fn gathered(minute: usize, robots: &Robots) -> Resources {
+    Resources {
+        ore: Expression::sum(
+            zip((1..=minute).rev(), robots.ore.iter().take(minute))
+                .map(|(k, var)| var.mul(k as u32)),
+        ) + minute as u32,
+        clay: Expression::sum(
+            zip((1..=minute).rev(), robots.clay.iter().take(minute))
+                .map(|(k, var)| var.mul(k as u32)),
+        ),
+        obsidian: Expression::sum(
+            zip((1..=minute).rev(), robots.obsidian.iter().take(minute))
+                .map(|(k, var)| var.mul(k as u32)),
+        ),
+        geodes: Expression::sum(
+            zip((1..=minute).rev(), robots.geodes.iter().take(minute))
+                .map(|(k, var)| var.mul(k as u32)),
+        ),
+    }
 }
 
-fn can_build_ore_robot(blueprint: &Blueprint, game_state: &GameState) -> bool {
-    game_state.ore >= blueprint.ore_for_ore_robot
+fn spent(minute: usize, blueprint: &Blueprint, robots: &Robots) -> Resources {
+    let ore_robots = Expression::sum(robots.ore.iter().take(minute + 1));
+    let clay_robots = Expression::sum(robots.clay.iter().take(minute + 1));
+    let obsidian_robots = Expression::sum(robots.obsidian.iter().take(minute + 1));
+    let geode_robots = Expression::sum(robots.geodes.iter().take(minute + 1));
+    let ore = ore_robots * blueprint.ore_per_ore_robot
+        + clay_robots * blueprint.ore_per_clay_robot
+        + obsidian_robots.clone() * blueprint.ore_per_obsidian_robot
+        + geode_robots.clone() * blueprint.ore_per_geode_robot;
+    let clay = obsidian_robots * blueprint.clay_per_obsidian_robot;
+    let obsidian = geode_robots * blueprint.obsidian_per_geode_robot;
+    Resources {
+        ore,
+        clay,
+        obsidian,
+        geodes: 0.into(),
+    }
 }
 
-fn build_ore_robot(blueprint: &Blueprint, game_state: &mut GameState) {
-    game_state.ore -= blueprint.ore_for_ore_robot;
-    game_state.ore_robots += 1;
+fn print_gathered(minute: usize, sol: &CoinCbcSolution, robots: &Robots) {
+    let ore: f64 = zip((1..=minute).rev(), robots.ore.iter().take(minute))
+        .map(|(k, var)| sol.value(*var).mul(k as f64))
+        .sum::<f64>()
+        + minute as f64;
+    let clay: f64 = zip((1..=minute).rev(), robots.clay.iter().take(minute))
+        .map(|(k, var)| sol.value(*var).mul(k as f64))
+        .sum();
+    let obsidian: f64 = zip((1..=minute).rev(), robots.obsidian.iter().take(minute))
+        .map(|(k, var)| sol.value(*var).mul(k as f64))
+        .sum();
+    let geodes: f64 = zip((1..=minute).rev(), robots.geodes.iter().take(minute))
+        .map(|(k, var)| sol.value(*var).mul(k as f64))
+        .sum();
+    println!("Gathered: ore={ore:>2}, clay={clay:>2}, obsidian={obsidian:>2}, geodes={geodes:>2}");
 }
 
-fn can_build_clay_robot(blueprint: &Blueprint, game_state: &GameState) -> bool {
-    game_state.ore >= blueprint.ore_for_clay_robot
+fn print_spent(minute: usize, sol: &CoinCbcSolution, blueprint: &Blueprint, robots: &Robots) {
+    let ore_robots: f64 = robots
+        .ore
+        .iter()
+        .take(minute + 1)
+        .map(|var| sol.value(*var))
+        .sum();
+    let clay_robots: f64 = robots
+        .clay
+        .iter()
+        .take(minute + 1)
+        .map(|var| sol.value(*var))
+        .sum();
+    let obsidian_robots: f64 = robots
+        .obsidian
+        .iter()
+        .take(minute + 1)
+        .map(|var| sol.value(*var))
+        .sum();
+    let geode_robots: f64 = robots
+        .geodes
+        .iter()
+        .take(minute + 1)
+        .map(|var| sol.value(*var))
+        .sum();
+    let ore = ore_robots * blueprint.ore_per_ore_robot as f64
+        + clay_robots * blueprint.ore_per_clay_robot as f64
+        + obsidian_robots * blueprint.ore_per_obsidian_robot as f64
+        + geode_robots * blueprint.ore_per_geode_robot as f64;
+    let clay = obsidian_robots * blueprint.clay_per_obsidian_robot as f64;
+    let obsidian = geode_robots * blueprint.obsidian_per_geode_robot as f64;
+    println!("Spent:    ore={ore:>2}, clay={clay:>2}, obsidian={obsidian:>2}");
 }
 
-fn build_clay_robot(blueprint: &Blueprint, game_state: &mut GameState) {
-    game_state.ore -= blueprint.ore_for_clay_robot;
-    game_state.clay_robots += 1;
+fn print_build(minute: usize, sol: &CoinCbcSolution, robots: &Robots) {
+    let ore = sol.value(robots.ore[minute]);
+    let clay = sol.value(robots.clay[minute]);
+    let obsidian = sol.value(robots.obsidian[minute]);
+    let geodes = sol.value(robots.geodes[minute]);
+    println!("Build:    ore={ore:>2}, clay={clay:>2}, obsidian={obsidian:>2}, geodes={geodes:>2}");
 }
 
-fn can_build_obsidian_robot(blueprint: &Blueprint, game_state: &GameState) -> bool {
-    game_state.ore >= blueprint.ore_for_obsidian_robot
-        && game_state.clay >= blueprint.clay_for_obsidian_robot
+fn print_robots(minute: usize, sol: &CoinCbcSolution, robots: &Robots) {
+    let ore: f64 = robots
+        .ore
+        .iter()
+        .take(minute)
+        .map(|var| sol.value(*var))
+        .sum::<f64>()
+        + 1_f64;
+    let clay: f64 = robots
+        .clay
+        .iter()
+        .take(minute)
+        .map(|var| sol.value(*var))
+        .sum::<f64>();
+    let obsidian: f64 = robots
+        .obsidian
+        .iter()
+        .take(minute)
+        .map(|var| sol.value(*var))
+        .sum::<f64>();
+    let geodes: f64 = robots
+        .geodes
+        .iter()
+        .take(minute)
+        .map(|var| sol.value(*var))
+        .sum::<f64>();
+    println!("Robots:   ore={ore:>2}, clay={clay:>2}, obsidian={obsidian:>2}, geodes={geodes:>2}");
 }
 
-fn build_obsidian_robot(blueprint: &Blueprint, game_state: &mut GameState) {
-    game_state.ore -= blueprint.ore_for_obsidian_robot;
-    game_state.clay -= blueprint.clay_for_obsidian_robot;
-    game_state.obsidian_robots += 1;
-}
-
-fn can_build_geode_robot(blueprint: &Blueprint, game_state: &GameState) -> bool {
-    game_state.ore >= blueprint.ore_for_geode_robot
-        && game_state.obsidian >= blueprint.obsidian_for_geode_robot
-}
-
-fn build_geode_robot(blueprint: &Blueprint, game_state: &mut GameState) {
-    game_state.ore -= blueprint.ore_for_obsidian_robot;
-    game_state.obsidian -= blueprint.obsidian_for_geode_robot;
-    game_state.geode_robots += 1;
-}
-
-fn parse_blueprints(input: String) -> Vec<Blueprint> {
+fn parse(input: String) -> Vec<Blueprint> {
     input
         .lines()
         .map(|line| {
@@ -199,17 +278,17 @@ fn parse_blueprints(input: String) -> Vec<Blueprint> {
                         .collect::<String>()
                 })
                 .filter(|word| !word.is_empty())
-                .flat_map(|word| word.parse::<u16>().ok())
+                .flat_map(|word| word.parse::<u32>().ok())
                 .collect::<Vec<_>>()
         })
         .map(|numbers| Blueprint {
             nr: numbers[0],
-            ore_for_ore_robot: numbers[1],
-            ore_for_clay_robot: numbers[2],
-            ore_for_obsidian_robot: numbers[3],
-            clay_for_obsidian_robot: numbers[4],
-            ore_for_geode_robot: numbers[5],
-            obsidian_for_geode_robot: numbers[6],
+            ore_per_ore_robot: numbers[1],
+            ore_per_clay_robot: numbers[2],
+            ore_per_obsidian_robot: numbers[3],
+            clay_per_obsidian_robot: numbers[4],
+            ore_per_geode_robot: numbers[5],
+            obsidian_per_geode_robot: numbers[6],
         })
         .collect()
 }
@@ -217,12 +296,21 @@ fn parse_blueprints(input: String) -> Vec<Blueprint> {
 #[cfg(test)]
 pub mod test {
     #[test]
-    fn solve_example() {
+    fn solve_example_part1() {
         let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("resources/example_input.txt");
         let input = std::fs::read_to_string(&path).expect("failed to read file");
-        let max_released = crate::solve(input).expect("failed to solve");
+        let max_released = crate::solve_part1(input).expect("failed to solve");
         assert_eq!(max_released, 33);
+    }
+
+    #[test]
+    fn solve_example_part2() {
+        let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("resources/example_input.txt");
+        let input = std::fs::read_to_string(&path).expect("failed to read file");
+        let max_released = crate::solve_part2(input).expect("failed to solve");
+        assert_eq!(max_released, 56 * 62);
     }
 
     #[test]
@@ -230,7 +318,16 @@ pub mod test {
         let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("resources/input.txt");
         let input = std::fs::read_to_string(&path).expect("failed to read file");
-        let solution = crate::solve(input).expect("failed to solve");
-        assert_eq!(solution, 1522);
+        let solution = crate::solve_part1(input).expect("failed to solve");
+        assert_eq!(solution, 1528);
+    }
+
+    #[test]
+    fn solve_part2() {
+        let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("resources/input.txt");
+        let input = std::fs::read_to_string(&path).expect("failed to read file");
+        let max_released = crate::solve_part2(input).expect("failed to solve");
+        assert_eq!(max_released, 16926);
     }
 }
