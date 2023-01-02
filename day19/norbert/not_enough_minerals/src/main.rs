@@ -6,6 +6,7 @@ use good_lp::{
     default_solver, variable, variables, Constraint, Expression, ResolutionError, Solution,
     SolverModel, Variable,
 };
+use num_bigint::BigInt;
 use std::cmp::min;
 use std::iter::{zip, Sum};
 use std::ops::Mul;
@@ -58,6 +59,16 @@ pub fn solve_part2(input: String) -> Result<u32, Error> {
     let blueprints = blueprints.get(..min(blueprints.len(), 3)).unwrap();
     let max_geodes = max_geodes(blueprints, MAX_MINUTES)?;
     Ok(max_geodes.iter().map(|(_, geodes)| geodes).product())
+}
+
+pub fn solve_part2_all_blueprints(input: String) -> Result<BigInt, Error> {
+    const MAX_MINUTES: usize = 32;
+    let blueprints = parse(input);
+    let max_geodes = max_geodes(&blueprints, MAX_MINUTES)?;
+    Ok(max_geodes
+        .iter()
+        .map(|(_, geodes)| BigInt::from(*geodes)) // Avoid overflow
+        .product())
 }
 
 fn max_geodes(blueprints: &[Blueprint], max_minutes: usize) -> Result<Vec<(u32, u32)>, Error> {
@@ -295,6 +306,9 @@ fn parse(input: String) -> Vec<Blueprint> {
 
 #[cfg(test)]
 pub mod test {
+    use num_bigint::BigInt;
+    use std::str::FromStr;
+
     #[test]
     fn solve_example_part1() {
         let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -329,5 +343,17 @@ pub mod test {
         let input = std::fs::read_to_string(&path).expect("failed to read file");
         let max_released = crate::solve_part2(input).expect("failed to solve");
         assert_eq!(max_released, 16926);
+    }
+
+    #[test]
+    fn solve_part2_all_blueprints() {
+        let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("resources/input.txt");
+        let input = std::fs::read_to_string(&path).expect("failed to read file");
+        let max_released = crate::solve_part2_all_blueprints(input).expect("failed to solve");
+        assert_eq!(
+            max_released,
+            BigInt::from_str("321526786821710237554812382609844207616000").unwrap()
+        );
     }
 }
