@@ -2,6 +2,7 @@ extern crate core;
 
 use crate::Error::InvalidInput;
 use crate::Flow::{Left, Right};
+use std::collections::HashMap;
 
 fn main() {}
 
@@ -38,63 +39,73 @@ pub fn solve(input: String, max_blocks: u64) -> Result<u64, Error> {
     let mut chamber: Vec<[bool; CHAMBER_WIDTH]> = vec![];
     let mut height: u64 = 0;
 
-    // Let block fall
-    for block_nr in 0..max_blocks {
-        if block_nr % 100000000 == 0 {
-            println!("block_nr={block_nr}");
-        }
+    // Cycle detection
+    let mut prev_block_nr = 0;
+    let mut prev_height = 0;
+    let mut cycle_data = HashMap::new();
 
-        let mut pos: (usize, usize) = (2, chamber.len() + 3);
+    // Let the blocks fall
+    let mut block_nr = 0;
+    while block_nr < max_blocks {
+        let (mut x, mut y) = (2, chamber.len() + 3);
         let block = next_block(block_nr);
-        let mut settled = false;
-        while !settled {
-            // Blowing in the wind
+        loop {
+            // Block is blowing in the wind
             match flow.next().expect("Cyclic iterator ran out of items") {
                 Left => {
-                    if can_move_left(pos, &block, &chamber) {
-                        pos.0 -= 1;
+                    if can_move_left(&(x, y), &block, &chamber) {
+                        x -= 1;
                     }
                 }
                 Right => {
-                    if can_move_right(pos, &block, &chamber) {
-                        pos.0 += 1;
+                    if can_move_right(&(x, y), &block, &chamber) {
+                        x += 1;
                     }
                 }
             }
             used_flows += 1;
             used_flows %= FLOW_CYCLE;
 
+            // Check for cycle
+            if used_flows == 0 {
+                let block_nr_diff = block_nr - prev_block_nr;
+                let height_diff = height - prev_height;
+                prev_block_nr = block_nr;
+                prev_height = height;
+                let count = *cycle_data
+                    .entry((block_nr_diff, height_diff))
+                    .and_modify(|e| *e += 1)
+                    .or_insert(0);
+                if count == 10 {
+                    println!("Cycle detected. Skipping ahead ...");
+                    println!(
+                        "From: block_nr={block_nr}, block_nr_diff={block_nr_diff}, used_flows={used_flows}, height={height}, height_diff={height_diff}",
+                    );
+                    let skip_cycles = (max_blocks - block_nr) / block_nr_diff;
+                    block_nr += block_nr_diff * skip_cycles;
+                    height += height_diff * skip_cycles;
+                    println!(
+                        "To:   block_nr={block_nr}, block_nr_diff={block_nr_diff}, used_flows={used_flows}, height={height}, height_diff={height_diff}",
+                    );
+                }
+            }
+
             // Falling down
-            if can_move_down(pos, &block, &chamber) {
-                pos.1 -= 1;
+            if can_move_down(&(x, y), &block, &chamber) {
+                y -= 1;
             } else {
-                settled = true;
-                while chamber.len() < pos.1 + block_height(&block) {
+                while chamber.len() < y + block_height(&block) {
                     const EMPTY_LINE: [bool; CHAMBER_WIDTH] =
                         [false, false, false, false, false, false, false];
                     chamber.push(EMPTY_LINE);
                     height += 1;
                 }
-                add_block(pos, &block, &mut chamber);
-
-                // Print height if we hit full cycle, i.e. we are back to first block and first flow
-                if (block_nr + 1) % NUM_BLOCKS == 0 && used_flows == 0 {
-                    println!("Hit full cycle: block_nr={block_nr}, height={height}");
-                }
-
-                // Forget old chamber lines
-                const MAX_CHAMBER_SIZE: usize = 100000000;
-                const REDUCED_CHAMBER_SIZE: usize = 10000;
-                if chamber.len() > MAX_CHAMBER_SIZE {
-                    println!("Draining chamber");
-                    chamber = chamber
-                        .drain((chamber.len() - REDUCED_CHAMBER_SIZE)..)
-                        .collect();
-                }
+                add_block(&(x, y), &block, &mut chamber);
+                break; // Block has settled. Continue with next one.
             }
         }
+        block_nr += 1;
     }
-
     Ok(height)
 }
 
@@ -107,48 +118,49 @@ pub fn block_width(block: &[Vec<bool>]) -> usize {
 }
 
 pub fn can_move_left(
-    mut pos: (usize, usize),
+    (x, y): &(usize, usize),
     block: &Vec<Vec<bool>>,
     chamber: &Vec<[bool; CHAMBER_WIDTH]>,
 ) -> bool {
-    if pos.0 == 0 {
+    if x == &0 {
         return false;
     }
-    pos.0 -= 1;
-    collision(pos, block, chamber)
+    collision(&(x - 1, *y), block, chamber)
 }
 
 pub fn can_move_right(
-    mut pos: (usize, usize),
+    (x, y): &(usize, usize),
     block: &Vec<Vec<bool>>,
     chamber: &Vec<[bool; CHAMBER_WIDTH]>,
 ) -> bool {
-    if pos.0 + block_width(block) >= CHAMBER_WIDTH {
+    if x + block_width(block) >= CHAMBER_WIDTH {
         return false;
     }
-    pos.0 += 1;
-    collision(pos, block, chamber)
+    collision(&(x + 1, *y), block, chamber)
 }
 
 pub fn can_move_down(
-    mut pos: (usize, usize),
+    (x, y): &(usize, usize),
     block: &Vec<Vec<bool>>,
     chamber: &Vec<[bool; CHAMBER_WIDTH]>,
 ) -> bool {
-    if pos.1 == 0 {
+    if y == &0 {
         return false;
     }
-    pos.1 -= 1;
-    collision(pos, block, chamber)
+    collision(&(*x, y - 1), block, chamber)
 }
 
-pub fn collision(pos: (usize, usize), block: &Vec<Vec<bool>>, chamber: &Vec<[bool; 7]>) -> bool {
+pub fn collision(
+    (x, y): &(usize, usize),
+    block: &Vec<Vec<bool>>,
+    chamber: &Vec<[bool; 7]>,
+) -> bool {
     for block_y in 0..block_height(block) {
-        let chamber_y = block_y + pos.1;
+        let chamber_y = block_y + y;
         if chamber_y < chamber.len() {
             let chamber_line = chamber[chamber_y];
             for block_x in 0..block_width(block) {
-                let chamber_x = block_x + pos.0;
+                let chamber_x = block_x + x;
                 if block[block_y][block_x] && chamber_line[chamber_x] {
                     return false;
                 }
@@ -158,15 +170,19 @@ pub fn collision(pos: (usize, usize), block: &Vec<Vec<bool>>, chamber: &Vec<[boo
     true
 }
 
-fn add_block(pos: (usize, usize), block: &Vec<Vec<bool>>, chamber: &mut Vec<[bool; 7]>) -> bool {
+fn add_block(
+    (x, y): &(usize, usize),
+    block: &Vec<Vec<bool>>,
+    chamber: &mut Vec<[bool; 7]>,
+) -> bool {
     for block_y in 0..block_height(block) {
-        let chamber_y = block_y + pos.1;
+        let chamber_y = block_y + y;
         if chamber_y >= chamber.len() {
             panic!("Chamber not high enough.");
         }
         let chamber_line = &mut chamber[chamber_y];
         for block_x in 0..block_width(block) {
-            let chamber_x = block_x + pos.0;
+            let chamber_x = block_x + x;
             chamber_line[chamber_x] |= block[block_y][block_x];
         }
     }
@@ -230,6 +246,6 @@ pub mod test {
         path.push("resources/input.txt");
         let input = std::fs::read_to_string(&path).expect("failed to read file");
         let height = crate::solve(input, 1000000000000).expect("failed to solve");
-        assert_eq!(height, 3157);
+        assert_eq!(height, 1581449275319);
     }
 }
