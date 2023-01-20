@@ -1,6 +1,7 @@
 extern crate core;
 
 use crate::Error::InvalidInput;
+use std::collections::VecDeque;
 
 fn main() {}
 
@@ -15,54 +16,56 @@ pub fn solve(input: String) -> Result<String, Error> {
     let lines: Vec<Vec<_>> = input.lines().map(|line| line.chars().collect()).collect();
     let decimals = lines
         .iter()
-        .map(snafu_to_dec)
+        .map(|a| snafu_to_dec(a))
         .collect::<Result<Vec<_>, Error>>()?;
     Ok(dec_to_snafu(decimals.iter().sum()).iter().collect())
 }
 
-fn snafu_to_dec(line: &Vec<char>) -> Result<i64, Error> {
+fn snafu_to_dec(line: &[char]) -> Result<i64, Error> {
     let mut sum = 0;
-    let mut n = BASE.pow((line.len() - 1) as u32) as i64;
-    for c in line {
-        sum += n * match c {
-            '2' => Ok(2),
-            '1' => Ok(1),
-            '0' => Ok(0),
-            '-' => Ok(-1),
-            '=' => Ok(-2),
-            _ => Err(InvalidInput),
-        }?;
-        n /= BASE as i64;
+    for (i, c) in line.iter().rev().enumerate() {
+        sum += BASE.pow(i as u32) as i64
+            * match c {
+                '2' => Ok(2),
+                '1' => Ok(1),
+                '0' => Ok(0),
+                '-' => Ok(-1),
+                '=' => Ok(-2),
+                _ => Err(InvalidInput),
+            }?;
     }
     Ok(sum)
 }
 
-fn dec_to_snafu(mut n: i64) -> Vec<char> {
-    let mut max_digit = 0;
-    loop {
-        let pow = BASE.pow(max_digit);
-        let sum_smaller_digit = 2 * (pow - 1) / 4;
-        if ((n.unsigned_abs() - sum_smaller_digit) + (pow - 1)) / pow <= 2 {
-            break;
-        }
-        max_digit += 1;
+fn dec_to_snafu(mut n: i64) -> VecDeque<char> {
+    if n == 0 {
+        return VecDeque::from(['0']);
     }
-    let mut snafu = vec![];
-
-    for exp in (0..=max_digit).rev() {
-        let pow = BASE.pow(exp) as i64;
-        let sum_smaller_digit = 2 * (pow - 1) / 4;
-        let quotient = ((n.abs() - sum_smaller_digit) + (pow - 1)) / pow;
-        let quotient = quotient * n.signum();
-        match quotient {
-            2 => snafu.push('2'),
-            1 => snafu.push('1'),
-            0 => snafu.push('0'),
-            -1 => snafu.push('-'),
-            -2 => snafu.push('='),
-            _ => panic!("Unexpect quotient"),
+    let mut snafu = VecDeque::new();
+    while n != 0 {
+        match n % BASE as i64 {
+            0 => {
+                snafu.push_front('0');
+            }
+            1 => {
+                snafu.push_front('1');
+                n -= 1;
+            }
+            2 => {
+                snafu.push_front('2');
+                n -= 2;
+            }
+            3 => {
+                snafu.push_front('=');
+                n += 2;
+            }
+            4 => {
+                snafu.push_front('-');
+                n += 1;
+            }
+            _ => panic!("Unexpect remainder"),
         }
-        n -= quotient * pow;
+        n /= BASE as i64;
     }
     snafu
 }
@@ -73,24 +76,49 @@ pub mod test {
 
     #[test]
     fn snafu_to_dec1() {
-        let dec = snafu_to_dec(&"1=-0-2".chars().collect()).expect("failed to convert number");
+        let dec = snafu_to_dec(&"1=-0-2".chars().collect::<Vec<char>>())
+            .expect("failed to convert number");
         assert_eq!(dec, 1747);
     }
 
     #[test]
+    fn dec_to_snafu0() {
+        let snafu: String = dec_to_snafu(0).iter().collect();
+        assert_eq!(snafu, "0");
+    }
+
+    #[test]
     fn dec_to_snafu1() {
+        let snafu: String = dec_to_snafu(1).iter().collect();
+        assert_eq!(snafu, "1");
+    }
+
+    #[test]
+    fn dec_to_snafu2() {
+        let snafu: String = dec_to_snafu(2).iter().collect();
+        assert_eq!(snafu, "2");
+    }
+
+    #[test]
+    fn dec_to_snafu3() {
+        let snafu: String = dec_to_snafu(3).iter().collect();
+        assert_eq!(snafu, "1=");
+    }
+
+    #[test]
+    fn dec_to_snafu12() {
         let snafu: String = dec_to_snafu(12).iter().collect();
         assert_eq!(snafu, "22");
     }
 
     #[test]
-    fn dec_to_snafu2() {
+    fn dec_to_snafu13() {
         let snafu: String = dec_to_snafu(13).iter().collect();
         assert_eq!(snafu, "1==");
     }
 
     #[test]
-    fn dec_to_snafu3() {
+    fn dec_to_snafu1747() {
         let snafu: String = dec_to_snafu(1747).iter().collect();
         assert_eq!(snafu, "1=-0-2");
     }
